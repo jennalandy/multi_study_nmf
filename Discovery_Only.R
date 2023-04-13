@@ -170,8 +170,15 @@ integrand2 <- function(x,k,alphap,w,betae,alphae,betap) {
 }
 
 ### Full Sampler
-discovery_sampler <- function(M,lambda_p=0.5,a_p=5,b_p=0.05,lambda_e=1,a_e=5,b_e=0.01,
-                              Ntot=50,a=0.8,b=0.8,inits=NULL,fixed=FALSE,A.fixed=NULL,first=T) {
+discovery_sampler <- function(
+  M,lambda_p=0.5,a_p=5,b_p=0.05,lambda_e=1,a_e=5,b_e=0.01,
+  Ntot=50,a=0.8,b=0.8,inits=NULL,fixed=FALSE,A.fixed=NULL,first=T,
+  logfile="multi_study.log", logevery=100, savefile = "multi_study.res", saveevery = 1000
+) {
+  if (!is.null(logfile)) {
+    sink(file = logfile)
+  }
+
   # Identify values
   K <- dim(M[[1]])[1]
   S <- length(M)
@@ -246,6 +253,9 @@ discovery_sampler <- function(M,lambda_p=0.5,a_p=5,b_p=0.05,lambda_e=1,a_e=5,b_e
   }
 
   for (l in 1:totaliters) {
+    if (l %% logevery == 0) {
+      print(paste(l, '/', totaliters))
+    }
     gamma<-1
     
     # Update exposures
@@ -347,6 +357,33 @@ discovery_sampler <- function(M,lambda_p=0.5,a_p=5,b_p=0.05,lambda_e=1,a_e=5,b_e
      }
    }
 
+   if (l %% saveevery == 0) {
+    if (first) {
+      As <- sapply(1:length(A_chain),function(x) paste0((bitsToInt(A_chain[[x]][,colSums(A_chain[[x]])>0])),collapse=""))
+      As.tab <- sort(table(As),decreasing=TRUE) 
+      As.vec <- names(As.tab)[1:5] 
+      inds <- sapply(As.vec,function(x) which(As==x)[1])
+      As.list <- lapply(inds,function(x) A_chain[[x]][,colSums(A_chain[[x]])>0])
+      Ps.list <- lapply(inds,function(x) P_chain[[x]][,colSums(A_chain[[x]])>0])
+      Es.list <- lapply(inds,function(x) lapply(1:S,function(s) E_chain[[x]][[s]][colSums(A_chain[[x]])>0,]))
+      res <- list(As.list,Ps.list,Es.list)
+      save(res, file = savefile)
+    } else {
+      marg.lik <- -1*sumLog(sapply(50:100,function(x) -1*llk_chain[[x]]))
+      Pest <- array(0,dim=c(dim(P),200))
+      for (i in 801:1000) {
+        Pest[,,(i-800)] <- P_chain[[i]]
+      }
+      Pest <- apply(Pest,c(1,2),median)
+      res <- list(marg.lik,A.fixed,Pest)
+      save(res, file = savefile)
+    } 
+   }
+  }
+
+  if (!is.null(logfile)) {
+    sink()
+    unlink(logfile)
   }
   
   if (first) {
@@ -357,7 +394,9 @@ discovery_sampler <- function(M,lambda_p=0.5,a_p=5,b_p=0.05,lambda_e=1,a_e=5,b_e
     As.list <- lapply(inds,function(x) A_chain[[x]][,colSums(A_chain[[x]])>0])
     Ps.list <- lapply(inds,function(x) P_chain[[x]][,colSums(A_chain[[x]])>0])
     Es.list <- lapply(inds,function(x) lapply(1:S,function(s) E_chain[[x]][[s]][colSums(A_chain[[x]])>0,]))
-    return(list(As.list,Ps.list,Es.list))
+    res <- list(As.list,Ps.list,Es.list)
+    save(res, file = savefile)
+    return(res)
   } else {
     marg.lik <- -1*sumLog(sapply(50:100,function(x) -1*llk_chain[[x]]))
     Pest <- array(0,dim=c(dim(P),200))
@@ -365,7 +404,9 @@ discovery_sampler <- function(M,lambda_p=0.5,a_p=5,b_p=0.05,lambda_e=1,a_e=5,b_e
       Pest[,,(i-800)] <- P_chain[[i]]
     }
     Pest <- apply(Pest,c(1,2),median)
-    return(list(marg.lik,A.fixed,Pest))
+    res <- list(marg.lik,A.fixed,Pest)
+    save(res, file = savefile)
+    return(res)
   } 
 }
 
